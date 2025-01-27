@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { fetchStars } from '../services/api';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
@@ -7,6 +7,8 @@ import { gsap } from 'gsap';
 const StarMap3D = () => {
   const mountRef = useRef();
   const tooltipRef = useRef();
+  const [filter, setFilter] = useState("brightest"); // Critère par défaut : "Les plus brillantes"
+  const [filteredStars, setFilteredStars] = useState([]); // Liste des étoiles filtrées
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -67,8 +69,8 @@ const StarMap3D = () => {
     scene.add(earth);
 
     // Gestion des orbites
-    const earthOrbitRadius = 15; // Rayon de l'orbite de la Terre autour du Soleil
-    let earthOrbitAngle = 0; // Angle initial de l'orbite
+    const earthOrbitRadius = 15;
+    let earthOrbitAngle = 0;
 
     // Raycaster pour la détection des survols
     const raycaster = new THREE.Raycaster();
@@ -79,7 +81,25 @@ const StarMap3D = () => {
     const addStars = async () => {
       const stars = await fetchStars();
 
-      stars.forEach((star) => {
+      // Appliquer le filtre sélectionné
+      let filtered = [];
+      if (filter === "brightest") {
+        // Les 50 étoiles les plus brillantes (par magnitude croissante)
+        filtered = stars.sort((a, b) => a.mag - b.mag).slice(0, 50);
+      } else if (filter === "closest") {
+        // Les 50 étoiles les plus proches (par distance croissante)
+        filtered = stars.sort((a, b) => a.dist - b.dist).slice(0, 50);
+      }
+
+      // Mettre à jour la liste des étoiles filtrées
+      setFilteredStars(filtered);
+
+      // Supprimer les anciennes étoiles
+      starObjects.forEach((star) => scene.remove(star));
+      starObjects.length = 0;
+
+      // Ajouter les nouvelles étoiles
+      filtered.forEach((star) => {
         const { ra, dec, mag, spect } = star;
 
         const radius = 20;
@@ -149,9 +169,6 @@ const StarMap3D = () => {
     const animate = () => {
       requestAnimationFrame(animate);
 
-      // Rotation de la Terre
-      earth.rotation.y += 0.002;
-
       // Orbite de la Terre autour du Soleil
       earthOrbitAngle += 0.01;
       const earthX = earthOrbitRadius * Math.cos(earthOrbitAngle);
@@ -169,13 +186,66 @@ const StarMap3D = () => {
       renderer.dispose();
       mount.removeEventListener("mousemove", onMouseMove);
     };
-  }, []);
+  }, [filter]); // Recharger les étoiles lorsque le filtre change
 
   return (
     <div
       ref={mountRef}
       style={{ width: "100%", height: "100vh", position: "relative" }}
     >
+      {/* Sélecteur */}
+      <select
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        style={{
+          position: "absolute",
+          top: "10px",
+          left: "10px",
+          zIndex: 10,
+          padding: "5px",
+        }}
+      >
+        <option value="brightest">Les plus brillantes</option>
+        <option value="closest">Les plus proches</option>
+      </select>
+
+      {/* Liste des étoiles */}
+      <div
+        style={{
+          position: "absolute",
+          top: "50px",
+          right: "10px",
+          width: "300px",
+          backgroundColor: "rgba(0, 0, 0, 0.8)",
+          color: "white",
+          padding: "10px",
+          borderRadius: "8px",
+          overflowY: "auto",
+          maxHeight: "90vh",
+        }}
+      >
+        <h3 style={{ textAlign: "center", marginBottom: "10px" }}>Étoiles Filtrées</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {filteredStars.map((star, index) => (
+            <div
+              key={index}
+              style={{
+                padding: "10px",
+                borderRadius: "5px",
+                backgroundColor: index % 2 === 0 ? "#1e3a8a" : "#2563eb",
+                color: "white",
+                boxShadow: "0px 4px 6px rgba(0, 0, 0, 0.3)",
+              }}
+            >
+              <strong>Nom :</strong> {star.spect || "Undefined"} <br />
+              <strong>Magnitude :</strong> {star.mag.toFixed(2)} <br />
+              <strong>Distance :</strong> {star.dist.toFixed(2)} AL
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tooltip */}
       <div
         ref={tooltipRef}
         style={{
